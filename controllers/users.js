@@ -28,42 +28,47 @@ const userControllers = {
             });
         }
     },
-    login: async (req, res) => {
+    login: (req, res) => {
         try {
-            const user = {
-                email: req.body.email,
-                password: req.body.password
-            };
-            const foundUser = await User.findOne({ email: user.email });
-            if (foundUser) {
-                const authenticated = await helpers.comparePassword(
-                    user.password,
-                    foundUser.populate
-                );
-                if (authenticated) {
-                    const token = await helpers.createToken(foundUser);
-                    res.status(200).send({
-                        message: "Login succes",
-                        token: token,
-                        user: {
-                            fullName: foundUser.fullName,
-                            email: foundUser.email
-                        }
-                    });
+            // Check if the email entered has been registered or not, if its not, stop the login (else)
+            User.findOne({ email: req.body.email }, async (error, result) => {
+                if (error) {
+                    res.send(error);
                 } else {
-                    res.status(500).send({
-                        message: "Login fail"
-                    });
+                    if (result === null)
+                        return res.send("Your email is not registered");
+
+                    // compare the encrypted password to the password in the database
+                    const validPassword = await bcrypt.compare(
+                        req.body.password,
+                        result.password
+                    );
+
+                    // Stop the login process if the password doesn't match
+                    if (!validPassword) {
+                        return res.send("password is not valid");
+                    }
+                    // give the token if the password correct
+                    else {
+                        const token = jwt.sign(
+                            {
+                                id: result.id,
+                                email: result.email
+                            },
+                            process.env.JWT_SECRET,
+                            { expiresIn: "7d" }
+                        );
+
+                        res.send({
+                            message: "You are logged in",
+                            token: token,
+                            user: result
+                        });
+                    }
                 }
-            } else {
-                res.status(500).send({
-                    message: "Login fail"
-                });
-            }
-        } catch (error) {
-            res.status(500).send({
-                message: "Login error"
             });
+        } catch (error) {
+            res.send(error);
         }
     },
     logout: async (req, res) => {
